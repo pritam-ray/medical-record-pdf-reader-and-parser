@@ -11,7 +11,8 @@ Extract equipment calibration tables from pharmaceutical BMR/GMP PDF documents u
 - **AI-Powered Extraction**: Uses Google Gemini API to intelligently extract table data from scanned PDFs
 - **Pharmaceutical Specific**: Designed for BMR/GMP equipment calibration checklists
 - **Parent-Child Handling**: Automatically detects and prefixes equipment with parent categories (CVC, RMG, FBD, etc.)
-- **Batch Processing**: Extract tables from multiple PDF pages in one run
+- **Batch Processing**: Process multiple PDFs from a folder automatically
+- **Multi-Page Table Support**: Combine data from tables spanning multiple pages into single INSERT statements
 - **SQL Generation**: Automatically generates database-ready INSERT statements
 - **Handwriting Support**: Preserves handwritten values exactly as written
 - **Error Handling**: Robust N/A handling for missing or crossed-out values
@@ -90,62 +91,130 @@ GEMINI_API_KEY=your-api-key-here
 Edit `config.py` to customize extraction:
 
 ```python
-# Path to your PDF file
-PDF_PATH = 'content.pdf'
+# Folder containing PDFs and their page number files
+CONTENT_FOLDER = 'content'
 
-# Page numbers to extract tables from
-PAGE_NUMBERS = [10, 160, 345, 348]
+# Output folder for SQL files
+OUTPUT_FOLDER = 'outputsql'
 
 # SQL Configuration
 EXP_ID = 46
 EXP_BATCH_NO = 1
-
-# Output file for SQL queries
-OUTPUT_FILE = 'output_queries.sql'
 ```
+
+### Folder Structure
+
+The tool now supports batch processing of multiple PDFs:
+
+```
+project/
+├── content/                  # Input folder
+│   ├── BSG4001.pdf          # PDF file
+│   ├── BSG4001.txt          # Page numbers: 10,160,345,348
+│   ├── BSG4002.pdf          # Another PDF
+│   ├── BSG4002.txt          # Page numbers: 5,15,25
+│   └── ...
+├── outputsql/               # Output folder (created automatically)
+│   ├── BSG4001.sql          # Generated SQL
+│   ├── BSG4002.sql          # Generated SQL
+│   └── ...
+└── pdf_table_extractor.py   # Main script
+```
+
+**Page Number File Format (.txt):**
+
+Each PDF must have a corresponding `.txt` file with the same name containing comma-separated page numbers:
+
+**Simple format (each page = separate table):**
+```
+10,160,345,348
+```
+
+**Grouped format (combine multi-page tables):**
+```
+10,(160,161),345,348
+```
+
+Use parentheses to group pages when a single table continues across multiple pages. For example, `(160,161)` will combine pages 160 and 161 into a single INSERT statement.
+
+See [MULTI_PAGE_TABLES.md](MULTI_PAGE_TABLES.md) for detailed documentation.
 
 ## 💻 Usage
 
-### Basic Usage
+### Basic Batch Processing
 
 ```bash
 python pdf_table_extractor.py
 ```
 
+This will:
+1. Scan the `content/` folder for PDF files
+2. For each PDF, read page numbers from the corresponding `.txt` file
+3. Extract tables and generate SQL statements
+4. Save output to `outputsql/` folder with matching filenames
+
 ### Expected Output
 
+**For single-page tables:**
 ```
-============================================================
-Processing 4 pages from PDF
-============================================================
-
 --- Processing Page 10 ---
 Extracting page 10 from PDF...
 Analyzing image with Gemini API...
 ✓ Successfully generated SQL for page 10
-  Table: Equipment Calibration Table
+  Table: Dispensing Area Checklist
+```
 
---- Processing Page 160 ---
-...
+**For multi-page tables (grouped with parentheses):**
+```
+--- Processing Page Group [160, 161] (Multi-page table) ---
+  Extracting page 160...
+  Extracting page 161...
+✓ Successfully generated SQL for page group [160, 161]
+  Table: Compression Area Checklist
+  Combined 2 pages into 1 table
+```
 
-============================================================
-✓ Generated 4 SQL statements
-✓ Saved to: output_queries.sql
-============================================================
+**Complete batch output:**
+```
+======================================================================
+Found 2 PDF file(s) to process
+======================================================================
+
+======================================================================
+Processing: BSG4001.pdf
+Pages: [10, [160, 161], 345, 348]
+======================================================================
+
+✓ Successfully processed BSG4001.pdf
+  Generated 4 SQL statements
+  Saved to: outputsql\BSG4001.sql
+
+======================================================================
+✓ Batch processing complete!
+  Output folder: outputsql
+======================================================================
 ```
 
 ### Programmatic Usage
 
 ```python
-from pdf_table_extractor import PDFTableExtractor
+from pdf_table_extractor import PDFTableExtractor, process_folder
 import os
 
-# Initialize extractor
-api_key = os.getenv('GEMINI_API_KEY')
+# Batch process a folder
+process_folder(
+    content_folder='content',
+    output_folder='outputsql',
+    api_key=os.getenv('GEMINI_API_KEY'),
+    exp_id=46,
+    exp_batch_no=1
+)
+
+# Or process a single PDF
 extractor = PDFTableExtractor(
-    api_key=api_key,
-    pdf_path='content.pdf',
-    page_numbers=[10, 160, 345, 348]
+    api_key=os.getenv('GEMINI_API_KEY'),
+    pdf_path='content/BSG4001.pdf',
+    page_numbers=[10, [160, 161], 345, 348]  # Note: [160,161] is a grouped page
 )
 
 # Process all pages
@@ -231,9 +300,13 @@ CREATE TABLE experimenttablerecord (
 
 ## 🔧 Troubleshooting
 
-### "PDF file not found"
-- Ensure `content.pdf` is in the project directory
-- Or update `PDF_PATH` in `config.py`
+### "No PDF files found in content"
+- Ensure PDFs are in the `content/` folder
+- Verify folder name is exactly `content`
+
+### "Skipping ... - no corresponding .txt file found"
+- Create a `.txt` file with same name as the PDF
+- Example: `BSG4001.pdf` needs `BSG4001.txt`
 
 ### "GEMINI_API_KEY not set"
 - Create `.env` file with your API key
@@ -248,6 +321,11 @@ CREATE TABLE experimenttablerecord (
 - Free tier limit reached (15 req/min, 1,500 req/day)
 - Wait 24 hours or get a new API key
 - Check usage: [Google AI Usage](https://ai.dev/usage?tab=rate-limit)
+
+### Multi-page table not combining correctly
+- Ensure parentheses are correct: `(10,11)` not `(10-11)`
+- Check all pages in group exist in PDF
+- See [MULTI_PAGE_TABLES.md](MULTI_PAGE_TABLES.md) for format guide
 
 ### Poor table extraction
 - Increase DPI in `extract_page_as_image()` (default: 300)
@@ -265,15 +343,22 @@ CREATE TABLE experimenttablerecord (
 
 ```
 pharmaceutical-bmr-extractor/
-├── pdf_table_extractor.py    # Main extraction script
+├── pdf_table_extractor.py     # Main extraction script
 ├── config.py                  # Configuration settings
 ├── requirements.txt           # Python dependencies
 ├── prompt.txt                 # Extraction rules (reference)
-├── README.md                  # This file
+├── README.md                  # Documentation
+├── QUICKSTART.md              # Quick start guide
+├── MULTI_PAGE_TABLES.md       # Multi-page table documentation
 ├── .env                       # API key (not committed)
 ├── .gitignore                 # Git exclusions
-├── content.pdf               # Your PDF file (place here)
-└── output_queries.sql        # Generated SQL (output)
+├── content/                   # Input folder
+│   ├── BSG4001.pdf           # PDF files
+│   ├── BSG4001.txt           # Page numbers: 10,(160,161),345,348
+│   └── EXAMPLE_PAGES.txt     # Format examples
+└── outputsql/                 # Output folder
+    ├── BSG4001.sql           # Generated SQL files
+    └── ...
 ```
 
 ## 🎨 Customization
@@ -308,7 +393,15 @@ See `prompt.txt` for the full extraction rules. Modify the prompt in `extract_ta
 2. **Quality Assurance**: Digitize GMP compliance checklists
 3. **Audit Preparation**: Convert paper records to database format
 4. **Batch Processing**: Extract data from multiple batch records automatically
-5. **Historical Data**: Digitize legacy paper-based records
+5. **Multi-Page Tables**: Handle large equipment lists spanning multiple pages
+6. **Historical Data**: Digitize legacy paper-based records
+
+## 📚 Additional Documentation
+
+- **[QUICKSTART.md](QUICKSTART.md)** - Step-by-step guide for beginners
+- **[MULTI_PAGE_TABLES.md](MULTI_PAGE_TABLES.md)** - Complete guide on handling tables that span multiple pages
+- **[BATCH_PROCESSING.md](BATCH_PROCESSING.md)** - Batch processing implementation details
+- **[prompt.txt](prompt.txt)** - Full extraction rules reference
 
 ## 🤝 Contributing
 

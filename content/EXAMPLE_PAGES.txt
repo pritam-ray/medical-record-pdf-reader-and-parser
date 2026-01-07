@@ -1,0 +1,47 @@
+# Example page numbers file format
+# File naming: If your PDF is "BSG4001.pdf", name this file "BSG4001.txt"
+#
+# ============================================================
+# FORMAT OPTIONS:
+# ============================================================
+#
+# 1. SINGLE PAGES (each page = separate table):
+#    10,160,345,348
+#
+# 2. GROUPED PAGES (pages in parentheses = single combined table):
+#    10,(160,161),345,(348,349,350)
+#    
+#    This means:
+#    - Page 10 → separate INSERT statement
+#    - Pages 160-161 → COMBINED into ONE INSERT statement
+#    - Page 345 → separate INSERT statement
+#    - Pages 348-350 → COMBINED into ONE INSERT statement
+#
+# ============================================================
+# WHEN TO USE GROUPING:
+# ============================================================
+#
+# Use parentheses when a single table continues across multiple pages!
+#
+# Example scenarios:
+# - Equipment calibration table starts on page 10, continues on page 11
+#   Format: (10,11)
+#
+# - Three separate tables on pages 5, 8, and 10
+#   Format: 5,8,10
+#
+# - Table on page 5, multi-page table on 8-9, then page 15
+#   Format: 5,(8,9),15
+#
+# ============================================================
+# EXAMPLE:
+# ============================================================
+
+# Dispensing area - single page
+10,
+# Compression area - table continues across 2 pages
+(160,161),
+# Primary packing - single page
+345,
+# Secondary packing - table continues across 3 pages
+(348,349,350)

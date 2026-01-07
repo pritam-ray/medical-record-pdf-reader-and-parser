@@ -33,6 +33,7 @@ wheels/
 # Output files
 output_queries.sql
 *.sql
+completed/
 
 # PDF files (optional - uncomment if you don't want to commit PDFs)
 *.pdf
